@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>AMPRA 2026 - SINGLE PAGE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        .canvas-container { width: 100%; max-width: 1000px; margin: 0 auto; background: #fff; padding: 5px; border-radius: 8px; }
+        canvas { width: 100% !important; height: auto !important; display: block; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200">
+
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <aside class="w-full md:w-80 bg-slate-800 p-6 border-r border-slate-700 shadow-2xl z-10">
+            <h1 class="text-2xl font-black text-blue-500 italic mb-1">AMPRA 2026</h1>
+            <p class="text-[12px] text-slate-500 font-bold tracking-widest uppercase mb-8 border-b border-slate-700 pb-2">KOORDINATOR UPTD MARIORIAWA</p>
+            <p class="text-[12px] text-slate-500 font-bold tracking-widest uppercase mb-8 border-b border-slate-700 pb-2">Jangan di bagikan Ke PIHAK LUAR Khusus untuk ASN UPTD Dinas Pendidikan dan Kebudayaan Wilayah Kec.Marioriawa</p>
+            <p class="text-[12px] text-slate-500 font-bold tracking-widest uppercase mb-8 border-b border-slate-700 pb-2">Bila ada kesamaan nama " Ketik NIP</p>
+
+            <div class="space-y-6">
+                <div id="statusBox" class="bg-slate-900 p-4 rounded-xl border border-blue-900/30 text-center">
+                    <div id="status" class="text-[10px] font-bold text-yellow-500 uppercase">Menghubungkan ke Drive...</div>
+                </div>
+
+                <div class="space-y-2">
+                    <input type="text" id="keyword" placeholder="Cari Nama..." class="w-full bg-slate-950 border border-slate-700 p-3 rounded-xl outline-none focus:ring-1 focus:ring-blue-500 text-sm">
+                    <button onclick="cariDiPdf()" id="btnCari" class="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 py-3 rounded-xl font-bold uppercase text-xs transition">Cari</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-4 md:p-8 bg-[#020617] overflow-y-auto">
+            <div id="resultArea" class="space-y-8">
+                <div class="text-center py-40 opacity-10 italic text-sm tracking-widest">SIAP MEMINDAI</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+        const pdfjs = window['pdfjs-dist/build/pdf'];
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        let pdfDataStore = [];
+
+        window.onload = () => {
+            google.script.run.withSuccessHandler(prosesListFile).getPdfList();
+        };
+
+        async function prosesListFile(files) {
+            const statusLabel = document.getElementById('status');
+            if (!files || files.length === 0) { statusLabel.innerHTML = "⚠️ KOSONG"; return; }
+            statusLabel.innerHTML = "⏳ MENGUNDUH DATA...";
+
+            for (let file of files) {
+                google.script.run.withSuccessHandler(async (base64) => {
+                    const binary = atob(base64);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+                    
+                    const pdf = await pdfjs.getDocument({data: bytes}).promise;
+                    let pageTexts = [];
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        pageTexts.push({ num: i, text: content.items.map(s => s.str).join(" ").toLowerCase() });
+                    }
+                    pdfDataStore.push({ instance: pdf, pages: pageTexts, name: file.name });
+                    statusLabel.innerHTML = `<span class="text-green-500">✅ ${pdfDataStore.length} FILE SYNC</span>`;
+                }).getPdfBlob(file.id);
+            }
+        }
+
+        async function cariDiPdf() {
+            const btn = document.getElementById('btnCari');
+            const key = document.getElementById('keyword').value.toLowerCase().trim();
+            const resArea = document.getElementById('resultArea');
+            if (!key) return;
+
+            btn.disabled = true;
+            btn.innerText = "MEMINDAI...";
+            resArea.innerHTML = ""; 
+
+            let found = false;
+            for (let doc of pdfDataStore) {
+                for (let pg of doc.pages) {
+                    if (pg.text.includes(key)) {
+                        found = true;
+                        await tampilkanHalaman(doc.instance, pg.num, doc.name);
+                    }
+                }
+            }
+            if (!found) resArea.innerHTML = "<div class='text-center opacity-50'>❌ Tidak ditemukan.</div>";
+            btn.disabled = false;
+            btn.innerText = "Cari Sekarang";
+        }
+
+        async function tampilkanHalaman(pdfInstance, pageNum, fileName) {
+            const resArea = document.getElementById('resultArea');
+            const page = await pdfInstance.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 2.0 }); // Skala tinggi agar hasil download tajam
+            
+            const canvasId = `canvas-${Math.random().toString(36).substr(2, 9)}`;
+            const container = document.createElement('div');
+            container.className = "bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-xl mb-8";
+            
+            container.innerHTML = `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                    <div>
+                        <h3 class="text-blue-400 font-bold text-sm">${fileName}</h3>
+                        <p class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Halaman ${pageNum}</p>
+                    </div>
+                    <button onclick="downloadSinglePage('${canvasId}', '${fileName}_Hal_${pageNum}')" 
+                            class="bg-green-600 hover:bg-green-500 text-white px-5 py-2 rounded-lg text-xs font-bold transition shadow-lg">
+                        📥 DOWNLOAD HALAMAN INI
+                    </button>
+                </div>
+                <div class="canvas-container overflow-hidden rounded-lg bg-white shadow-inner">
+                    <canvas id="${canvasId}"></canvas>
+                </div>
+            `;
+            resArea.appendChild(container);
+
+            const canvas = document.getElementById(canvasId);
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+        }
+
+        // FUNGSI DOWNLOAD HANYA HALAMAN YANG DIPILIH
+        function downloadSinglePage(canvasId, outputName) {
+            const canvas = document.getElementById(canvasId);
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            
+            // Tentukan orientasi berdasarkan ukuran canvas (Lanskap/Potret)
+            const orientation = canvas.width > canvas.height ? 'l' : 'p';
+            const pdf = new jsPDF(orientation, 'px', [canvas.width, canvas.height]);
+            
+            pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+            pdf.save(`${outputName}.pdf`);
+        }
+    </script>
+</body>
+</html>

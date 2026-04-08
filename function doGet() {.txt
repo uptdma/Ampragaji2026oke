@@ -1,0 +1,28 @@
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('AMPRA 2026 - Single Page Download')
+    // Izinkan aplikasi dibuka di dalam frame/embed (seperti Canva)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// ID Folder tetap sama
+const FOLDER_ID = "1vLvH0Zl2GTJswwnjlyLL4XTpNA4lfXjs";
+
+function getPdfList() {
+  try {
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    const files = folder.getFilesByType(MimeType.PDF);
+    let data = [];
+    while (files.hasNext()) {
+      let file = files.next();
+      data.push({ id: file.getId(), name: file.getName() });
+    }
+    return data;
+  } catch (e) { return []; }
+}
+
+function getPdfBlob(fileId) {
+  const file = DriveApp.getFileById(fileId);
+  return Utilities.base64Encode(file.getBlob().getBytes());
+}
